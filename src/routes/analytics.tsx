@@ -113,6 +113,10 @@ function Analytics() {
         </Panel>
       </div>
 
+      <RoutePerformance />
+
+
+
       <Panel title="Depot scorecard" hint="Utilisation and workshop load by depot.">
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {DTC_DEPOTS.map((d) => {
