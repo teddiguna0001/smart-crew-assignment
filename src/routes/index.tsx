@@ -20,7 +20,9 @@ import {
   Td,
   Th,
 } from "@/components/transit/primitives";
+import { DataScale } from "@/components/transit/DataScale";
 import { busTone } from "@/lib/transit-ui";
+
 import {
   DTC_DEPOTS,
   DTC_ROUTES,
