@@ -1,0 +1,393 @@
+import { createFileRoute } from "@tanstack/react-router";
+import { useMemo, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { AlertTriangle, Clock, Filter, Repeat, Rocket, Wand2 } from "lucide-react";
+import {
+  DataTable,
+  PageHead,
+  Panel,
+  Pill,
+  Td,
+  Th,
+  Metric,
+} from "@/components/transit/primitives";
+import { tripTone } from "@/lib/transit-ui";
+import { INITIAL_TRIPS, DTC_DEPOTS } from "@/data/transitData";
+import { minutesToClock } from "@/lib/day-plan";
+import type { AssignmentPlan } from "@/lib/ops-engine";
+import { fetchOpsState, opsStateQueryKey, runAssignment } from "@/lib/ops-api";
+
+
+export const Route = createFileRoute("/schedule")({
+  head: () => ({
+    meta: [
+      { title: "Scheduling Board — DTC TransitOps" },
+      {
+        name: "description",
+        content:
+          "Trip blocks, duty types and conflict detection for automated DTC bus scheduling and crew linking.",
+      },
+      { property: "og:title", content: "Scheduling Board — DTC TransitOps" },
+      {
+        property: "og:description",
+        content: "Trip blocks, duty types and conflict detection for DTC bus scheduling.",
+      },
+    ],
+  }),
+  component: Scheduling,
+});
+
+const STATUSES = ["All", "Scheduled", "In-Transit", "Delayed", "Conflict", "Completed"] as const;
+
+function Scheduling() {
+  const qc = useQueryClient();
+  const [status, setStatus] = useState<(typeof STATUSES)[number]>("All");
+  const [depot, setDepot] = useState("All depots");
+  const [preview, setPreview] = useState<AssignmentPlan | null>(null);
+
+  const opsState = useQuery({ queryKey: opsStateQueryKey, queryFn: fetchOpsState });
+
+  const assign = useMutation({
+    mutationFn: (persist: boolean) => runAssignment({ data: { persist } }),
+    onSuccess: (res) => {
+      setPreview(res.plan);
+      if (res.persisted) qc.invalidateQueries({ queryKey: opsStateQueryKey });
+    },
+  });
+
+  const published = opsState.data?.assignments ?? [];
+  const metrics = preview?.metrics ?? null;
+
+
+
+  const trips = useMemo(
+    () =>
+      INITIAL_TRIPS.filter(
+        (t) =>
+          (status === "All" || t.status === status) &&
+          (depot === "All depots" || t.depot === depot),
+      ),
+    [status, depot],
+  );
+
+  const conflicts = INITIAL_TRIPS.filter((t) => t.status === "Conflict");
+  const deadhead = INITIAL_TRIPS.reduce((sum, t) => sum + t.deadheadKm, 0);
+  const linked = INITIAL_TRIPS.filter((t) => t.dutyType === "Linked Shift").length;
+
+  return (
+    <div className="space-y-8">
+      <PageHead
+        eyebrow="Phase 4 · 5 — Blocking & rostering"
+        title="Scheduling board"
+        description="Turnaround blocks generated from GTFS headways, then linked to crew duties inside spreadover and rest-break limits."
+        aside={
+          <div className="flex flex-wrap gap-3">
+            <button
+              onClick={() => assign.mutate(false)}
+              disabled={assign.isPending}
+              className="inline-flex h-14 items-center gap-2 rounded-md bg-muted px-6 text-sm font-semibold text-foreground transition-transform duration-200 hover:scale-105 disabled:opacity-60"
+            >
+              <Wand2 className="h-4 w-4" strokeWidth={2.5} />
+              {assign.isPending ? "Solving…" : "Preview auto-assignment"}
+            </button>
+            <button
+              onClick={() => assign.mutate(true)}
+              disabled={assign.isPending}
+              className="inline-flex h-14 items-center gap-2 rounded-md bg-primary px-6 text-sm font-semibold text-primary-foreground transition-transform duration-200 hover:scale-105 disabled:opacity-60"
+            >
+              <Rocket className="h-4 w-4" strokeWidth={2.5} />
+              Publish roster
+            </button>
+            <button className="inline-flex h-14 items-center gap-2 rounded-md bg-ink px-6 text-sm font-semibold text-ink-foreground transition-transform duration-200 hover:scale-105">
+              <Repeat className="h-4 w-4" strokeWidth={2.5} />
+              Rebuild blocks
+            </button>
+          </div>
+        }
+
+      />
+
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <Metric label="Trips planned" value={INITIAL_TRIPS.length} tone="primary" />
+        <Metric
+          label="Conflicts"
+          value={conflicts.length}
+          tone={conflicts.length ? "destructive" : "secondary"}
+          delta="Crew or vehicle double-booking"
+        />
+        <Metric label="Linked shifts" value={linked} tone="secondary" delta="Same crew, same bus" />
+        <Metric
+          label="Deadhead"
+          value={deadhead.toFixed(1)}
+          unit="km"
+          tone="accent"
+          delta="Empty running across all blocks"
+        />
+      </div>
+
+      {conflicts.length ? (
+        <section className="rounded-lg bg-destructive-tint p-6">
+          <div className="flex items-center gap-3">
+            <span className="flex h-12 w-12 items-center justify-center rounded-md bg-destructive">
+              <AlertTriangle className="h-6 w-6 text-destructive-foreground" strokeWidth={2.4} />
+            </span>
+            <div>
+              <h2 className="text-lg font-bold text-destructive">
+                {conflicts.length} block{conflicts.length > 1 ? "s" : ""} need dispatcher action
+              </h2>
+              <p className="text-sm text-muted-foreground">
+                Resolve before the roster is published to depot terminals.
+              </p>
+            </div>
+          </div>
+          <ul className="mt-5 grid gap-3 md:grid-cols-2">
+            {conflicts.map((t) => (
+              <li key={t.id} className="rounded-md bg-background p-5">
+                <div className="flex items-center justify-between gap-3">
+                  <p className="num font-bold">{t.tripCode}</p>
+                  <Pill tone="destructive" solid>
+                    Route {t.routeNumber}
+                  </Pill>
+                </div>
+                <p className="mt-2 text-sm text-muted-foreground">{t.conflictReason}</p>
+                <p className="num mt-3 text-xs text-muted-foreground">
+                  {t.startTime}–{t.endTime} · {t.assignedBus} · {t.assignedDriver}
+                </p>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+
+      <Panel
+        title="Automatic resource assignment"
+        hint="Deterministic rule-based solver — eligibility, overlap and duty checks run on the server"
+        action={
+          <div className="flex items-center gap-2">
+            <Pill tone={assign.isError ? "destructive" : "primary"}>
+              {assign.isError
+                ? "Solver error"
+                : assign.data?.persisted
+                  ? "Roster published"
+                  : preview
+                    ? "Preview only"
+                    : "Idle"}
+            </Pill>
+            {published.length ? (
+              <span className="num label-xs text-muted-foreground">
+                {published.length} published trips
+              </span>
+            ) : null}
+          </div>
+        }
+      >
+        {assign.isError ? (
+          <p className="text-sm text-destructive">{(assign.error as Error).message}</p>
+        ) : null}
+
+        {metrics ? (
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            <Metric label="Trip coverage" value={metrics.coveragePct} unit="%" tone="primary" />
+            <Metric
+              label="Trips covered"
+              value={`${metrics.coveredTrips}/${metrics.totalTrips}`}
+              tone="secondary"
+              delta={`${metrics.uncoveredTrips} uncovered`}
+            />
+            <Metric
+              label="Resources used"
+              value={`${metrics.busesUsed} · ${metrics.crewUsed}`}
+              tone="accent"
+              delta="Buses · crew committed"
+            />
+            <Metric
+              label="Schedule conflicts"
+              value={metrics.scheduleConflicts}
+              tone={metrics.scheduleConflicts ? "destructive" : "secondary"}
+              delta="Overlaps rejected by the solver"
+            />
+          </div>
+        ) : (
+          <p className="text-sm text-muted-foreground">
+            Run the solver to build a feasible bus and crew plan for the operating day. Retired,
+            inactive and maintenance vehicles, off-duty or unavailable crew, spreadover breaches and
+            overlapping commitments are all excluded before scoring.
+          </p>
+        )}
+
+        {preview?.uncovered.length ? (
+          <div className="mt-6 rounded-md bg-destructive-tint p-5">
+            <p className="label-xs text-destructive">Uncovered trips</p>
+            <ul className="mt-3 grid gap-2 md:grid-cols-2">
+              {preview.uncovered.map((u) => (
+                <li key={u.tripId} className="text-sm">
+                  <span className="num font-semibold">{u.tripCode}</span>{" "}
+                  <span className="text-muted-foreground">
+                    {u.window} · {u.detail}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
+
+        {preview?.assignments.length ? (
+          <div className="mt-6">
+            <DataTable
+              head={
+                <>
+                  <Th>Trip</Th>
+                  <Th>Window</Th>
+                  <Th>Bus</Th>
+                  <Th>Driver</Th>
+                  <Th>Conductor</Th>
+                  <Th>Depot match</Th>
+                </>
+              }
+            >
+              {preview.assignments.map((a) => (
+                <tr key={a.tripId} className="transition-colors duration-200 hover:bg-muted">
+                  <Td>
+                    <p className="num font-semibold">{a.tripCode}</p>
+                    <p className="text-xs text-muted-foreground">Route {a.routeNumber}</p>
+                  </Td>
+                  <Td className="num">{a.window}</Td>
+                  <Td>
+                    <p className="num font-medium">{a.busCode}</p>
+                    <p className="text-xs text-muted-foreground">{a.busNumber}</p>
+                  </Td>
+                  <Td>{a.driverName}</Td>
+                  <Td className="text-muted-foreground">{a.conductorName ?? "—"}</Td>
+                  <Td>
+                    <Pill tone={a.sameDepot ? "secondary" : "accent"}>
+                      {a.sameDepot ? "Same depot" : "Cross depot"}
+                    </Pill>
+                  </Td>
+                </tr>
+              ))}
+            </DataTable>
+          </div>
+        ) : null}
+      </Panel>
+
+      {published.length ? (
+        <Panel title="Published roster" hint="Live assignments stored in the operations database">
+          <DataTable
+            head={
+              <>
+                <Th>Trip</Th>
+                <Th>Window</Th>
+                <Th>Bus</Th>
+                <Th>Crew</Th>
+                <Th>Source</Th>
+              </>
+            }
+          >
+            {published.map((a) => (
+              <tr key={a.id} className="transition-colors duration-200 hover:bg-muted">
+                <Td>
+                  <p className="num font-semibold">{a.trip_code}</p>
+                  <p className="text-xs text-muted-foreground">{a.depot}</p>
+                </Td>
+                <Td className="num">
+                  {minutesToClock(a.start_min)}–{minutesToClock(a.end_min)}
+                </Td>
+                <Td className="num">{a.bus_label ?? "—"}</Td>
+                <Td>
+                  <p>{a.driver_name ?? "—"}</p>
+                  <p className="text-xs text-muted-foreground">{a.conductor_name ?? "No conductor"}</p>
+                </Td>
+                <Td>
+                  <Pill tone={a.source === "AUTO_ASSIGN" ? "primary" : "accent"}>{a.source}</Pill>
+                </Td>
+              </tr>
+            ))}
+          </DataTable>
+        </Panel>
+      ) : null}
+
+
+
+      <Panel
+        title="Trip blocks"
+        hint={`${trips.length} of ${INITIAL_TRIPS.length} trips shown`}
+        action={
+          <div className="flex flex-wrap items-center gap-2">
+            <Filter className="h-4 w-4 text-muted-foreground" strokeWidth={2.4} />
+            {STATUSES.map((s) => (
+              <button
+                key={s}
+                onClick={() => setStatus(s)}
+                className={`label-xs rounded-sm px-3 py-2 transition-all duration-200 hover:scale-105 ${
+                  status === s
+                    ? "bg-ink text-ink-foreground"
+                    : "bg-muted text-muted-foreground hover:bg-border"
+                }`}
+              >
+                {s}
+              </button>
+            ))}
+            <select
+              value={depot}
+              onChange={(e) => setDepot(e.target.value)}
+              className="h-9 rounded-md bg-muted px-3 text-sm font-medium focus:bg-background focus:outline-none"
+            >
+              <option>All depots</option>
+              {DTC_DEPOTS.map((d) => (
+                <option key={d.id}>{d.name}</option>
+              ))}
+            </select>
+          </div>
+        }
+      >
+        <DataTable
+          head={
+            <>
+              <Th>Trip</Th>
+              <Th>Window</Th>
+              <Th>Corridor</Th>
+              <Th>Vehicle & crew</Th>
+              <Th>Duty type</Th>
+              <Th className="text-right">Deadhead</Th>
+              <Th>Status</Th>
+            </>
+          }
+        >
+          {trips.map((t) => (
+            <tr key={t.id} className="transition-colors duration-200 hover:bg-muted">
+              <Td>
+                <p className="num font-semibold">{t.tripCode}</p>
+                <p className="text-xs text-muted-foreground">{t.depot}</p>
+              </Td>
+              <Td>
+                <span className="num inline-flex items-center gap-1.5 font-semibold">
+                  <Clock className="h-3.5 w-3.5 text-muted-foreground" strokeWidth={2.4} />
+                  {t.startTime}–{t.endTime}
+                </span>
+              </Td>
+              <Td>
+                <span className="num rounded-sm bg-primary-tint px-2 py-1 text-xs font-bold text-primary">
+                  {t.routeNumber}
+                </span>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {t.origin} → {t.destination}
+                </p>
+              </Td>
+              <Td>
+                <p className="num font-medium">{t.assignedBus}</p>
+                <p className="text-xs text-muted-foreground">
+                  {t.assignedDriver} · {t.assignedConductor}
+                </p>
+              </Td>
+              <Td className="text-muted-foreground">{t.dutyType}</Td>
+              <Td className="num text-right font-semibold">{t.deadheadKm} km</Td>
+              <Td>
+                <Pill tone={tripTone(t.status)}>{t.status}</Pill>
+              </Td>
+            </tr>
+          ))}
+        </DataTable>
+      </Panel>
+    </div>
+  );
+}
