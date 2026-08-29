@@ -156,11 +156,35 @@ export const DISRUPTION_MIN = (() => {
 
 /* ---------------------------- derived state ------------------------ */
 
+export type TripStatus = "SCHEDULED" | "IN_PROGRESS" | "COMPLETED";
+
+/** Lifecycle of a planned trip against the simulation clock. */
+export function tripStatusAt(trip: PlannedTrip, simMinute: number): TripStatus {
+  if (simMinute >= trip.endMin) return "COMPLETED";
+  if (simMinute >= trip.startMin) return "IN_PROGRESS";
+  return "SCHEDULED";
+}
+
+/**
+ * Feature 14 — trip progress.
+ * progress = (simulationTime - tripStart) / (tripEnd - tripStart), clamped to 0..1.
+ */
+export function tripProgress(trip: PlannedTrip, simMinute: number) {
+  const span = trip.endMin - trip.startMin;
+  if (span <= 0) return simMinute >= trip.endMin ? 1 : 0;
+  return Math.min(1, Math.max(0, (simMinute - trip.startMin) / span));
+}
+
 export interface SimulatedBus extends ActiveBusPosition {
   tripCode: string;
   tripProgressPct: number;
   tripWindow: string;
   simStatus: "IN_SERVICE" | "AT_TERMINAL" | "AT_DEPOT";
+  /** Operational state derived from the trip lifecycle, not from telemetry. */
+  busState: "ON_TRIP" | "IDLE_AWAITING_NEXT_TRIP" | "AVAILABLE_AT_DEPOT";
+  completedTrips: number;
+  nextTripCode: string | null;
+  nextTripStart: number | null;
 }
 
 const busByRegistration = new Map(LIVE_BUSES.map((b) => [b.busId, b]));
@@ -173,7 +197,10 @@ export function busesAt(simMinute: number): SimulatedBus[] {
     const busTrips = DAY_PLAN.filter((t) => t.busId === bus.busId);
     if (!busTrips.length) return;
 
-    const active = busTrips.find((t) => simMinute >= t.startMin && simMinute < t.endMin);
+    const completedTrips = busTrips.filter((t) => tripStatusAt(t, simMinute) === "COMPLETED").length;
+    const active = busTrips.find((t) => tripStatusAt(t, simMinute) === "IN_PROGRESS");
+    // The next scheduled trip once the current one reaches its end.
+    const next = busTrips.find((t) => t.startMin > simMinute);
     const disrupted =
       active &&
       active.routeNumber === INITIAL_DISRUPTION.routeNumber &&
@@ -181,7 +208,7 @@ export function busesAt(simMinute: number): SimulatedBus[] {
       simMinute < DISRUPTION_MIN + 20;
 
     if (active) {
-      const t = (simMinute - active.startMin) / (active.endMin - active.startMin);
+      const t = tripProgress(active, simMinute);
       const p = pointAt(active.routeNumber, disrupted ? Math.min(t, 0.5) : t, active.direction === "DOWN");
       if (!p) return;
       out.push({
@@ -195,12 +222,17 @@ export function busesAt(simMinute: number): SimulatedBus[] {
         tripProgressPct: Math.round(t * 100),
         tripWindow: `${minutesToClock(active.startMin)}–${minutesToClock(active.endMin)}`,
         simStatus: "IN_SERVICE",
+        busState: "ON_TRIP",
+        completedTrips,
+        nextTripCode: next?.tripCode ?? null,
+        nextTripStart: next?.startMin ?? null,
       });
       return;
     }
 
+    // No trip running: the bus rests at the end point of its last completed
+    // trip, awaiting the next scheduled trip, or is idle/available at depot.
     const last = [...busTrips].reverse().find((t) => t.endMin <= simMinute);
-    const next = busTrips.find((t) => t.startMin > simMinute);
     const restingAt = last ?? busTrips[0]!;
     const atDepot = !last || !next;
     const p = pointAt(restingAt.routeNumber, last ? 1 : 0, restingAt.direction === "DOWN");
@@ -212,14 +244,19 @@ export function busesAt(simMinute: number): SimulatedBus[] {
       speedKmph: 0,
       status: "on-time",
       tripCode: next ? `Next ${next.tripCode}` : "Day complete",
-      tripProgressPct: 0,
+      tripProgressPct: last ? 100 : 0,
       tripWindow: next ? `departs ${minutesToClock(next.startMin)}` : "—",
       simStatus: atDepot ? "AT_DEPOT" : "AT_TERMINAL",
+      busState: next ? "IDLE_AWAITING_NEXT_TRIP" : "AVAILABLE_AT_DEPOT",
+      completedTrips,
+      nextTripCode: next?.tripCode ?? null,
+      nextTripStart: next?.startMin ?? null,
     });
   });
 
   return out;
 }
+
 
 /* ------------------------------ events ----------------------------- */
 
