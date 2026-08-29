@@ -227,6 +227,15 @@ export function NetworkMap() {
                       {b.tripCode} · {b.tripWindow} · {b.tripProgressPct}% through trip
                     </p>
                     <p className="text-xs">
+                      {b.busState === "ON_TRIP"
+                        ? "On trip"
+                        : b.busState === "IDLE_AWAITING_NEXT_TRIP"
+                          ? `Idle · next trip ${b.nextTripCode}`
+                          : "Available at depot"}{" "}
+                      · {b.completedTrips} trips completed today
+                    </p>
+
+                    <p className="text-xs">
                       {b.status === "on-time" ? "On time" : `${b.delayMins} min late`}
                       {record ? ` · fleet status ${record.status} · ${record.capacity} seats` : ""}
                     </p>
