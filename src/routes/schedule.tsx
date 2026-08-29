@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
-import { AlertTriangle, Clock, Filter, Repeat } from "lucide-react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { AlertTriangle, Clock, Filter, Repeat, Rocket, Wand2 } from "lucide-react";
 import {
   DataTable,
   PageHead,
@@ -12,6 +13,10 @@ import {
 } from "@/components/transit/primitives";
 import { tripTone } from "@/lib/transit-ui";
 import { INITIAL_TRIPS, DTC_DEPOTS } from "@/data/transitData";
+import { minutesToClock } from "@/lib/day-plan";
+import type { AssignmentPlan } from "@/lib/ops-engine";
+import { fetchOpsState, opsStateQueryKey, runAssignment } from "@/lib/ops-api";
+
 
 export const Route = createFileRoute("/schedule")({
   head: () => ({
