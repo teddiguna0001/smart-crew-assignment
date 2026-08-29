@@ -20,7 +20,9 @@ import {
   Td,
   Th,
 } from "@/components/transit/primitives";
+import { DataScale } from "@/components/transit/DataScale";
 import { busTone } from "@/lib/transit-ui";
+
 import {
   DTC_DEPOTS,
   DTC_ROUTES,
@@ -136,6 +138,10 @@ function Operations() {
           </dl>
         </div>
       </section>
+
+      <DataScale />
+
+
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <Metric
