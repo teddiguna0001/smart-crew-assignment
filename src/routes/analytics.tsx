@@ -1,7 +1,9 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { TrendingDown, TrendingUp } from "lucide-react";
 import { BarSeries, Metric, Meter, PageHead, Panel, Pill } from "@/components/transit/primitives";
+import { RoutePerformance } from "@/components/transit/RoutePerformance";
 import { inr } from "@/lib/transit-ui";
+
 import {
   BASELINE_OPTIMIZATION_METRICS,
   OPTIMIZED_RESULTS_METRICS,
