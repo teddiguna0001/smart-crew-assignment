@@ -40,8 +40,25 @@ export const Route = createFileRoute("/schedule")({
 const STATUSES = ["All", "Scheduled", "In-Transit", "Delayed", "Conflict", "Completed"] as const;
 
 function Scheduling() {
+  const qc = useQueryClient();
   const [status, setStatus] = useState<(typeof STATUSES)[number]>("All");
   const [depot, setDepot] = useState("All depots");
+  const [preview, setPreview] = useState<AssignmentPlan | null>(null);
+
+  const opsState = useQuery({ queryKey: opsStateQueryKey, queryFn: fetchOpsState });
+
+  const assign = useMutation({
+    mutationFn: (persist: boolean) => runAssignment({ data: { persist } }),
+    onSuccess: (res) => {
+      setPreview(res.plan);
+      if (res.persisted) qc.invalidateQueries({ queryKey: opsStateQueryKey });
+    },
+  });
+
+  const published = opsState.data?.assignments ?? [];
+  const metrics = preview?.metrics ?? null;
+
+
 
   const trips = useMemo(
     () =>
