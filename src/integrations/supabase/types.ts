@@ -14,7 +14,205 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      assignments: {
+        Row: {
+          bus_id: string
+          created_at: string
+          crew_id: string
+          id: string
+          reasons: Json
+          score: number
+          trip_id: string
+        }
+        Insert: {
+          bus_id: string
+          created_at?: string
+          crew_id: string
+          id?: string
+          reasons?: Json
+          score?: number
+          trip_id: string
+        }
+        Update: {
+          bus_id?: string
+          created_at?: string
+          crew_id?: string
+          id?: string
+          reasons?: Json
+          score?: number
+          trip_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "assignments_bus_id_fkey"
+            columns: ["bus_id"]
+            isOneToOne: false
+            referencedRelation: "buses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "assignments_crew_id_fkey"
+            columns: ["crew_id"]
+            isOneToOne: false
+            referencedRelation: "crew"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "assignments_trip_id_fkey"
+            columns: ["trip_id"]
+            isOneToOne: true
+            referencedRelation: "trips"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      buses: {
+        Row: {
+          capacity: number
+          code: string
+          created_at: string
+          depot_id: string
+          id: string
+          status: Database["public"]["Enums"]["bus_status"]
+          utilization_minutes: number
+        }
+        Insert: {
+          capacity?: number
+          code: string
+          created_at?: string
+          depot_id: string
+          id?: string
+          status?: Database["public"]["Enums"]["bus_status"]
+          utilization_minutes?: number
+        }
+        Update: {
+          capacity?: number
+          code?: string
+          created_at?: string
+          depot_id?: string
+          id?: string
+          status?: Database["public"]["Enums"]["bus_status"]
+          utilization_minutes?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "buses_depot_id_fkey"
+            columns: ["depot_id"]
+            isOneToOne: false
+            referencedRelation: "depots"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      crew: {
+        Row: {
+          created_at: string
+          depot_id: string
+          id: string
+          is_available: boolean
+          name: string
+          shift_end: string
+          shift_start: string
+          status: Database["public"]["Enums"]["crew_status"]
+          utilization_minutes: number
+        }
+        Insert: {
+          created_at?: string
+          depot_id: string
+          id?: string
+          is_available?: boolean
+          name: string
+          shift_end?: string
+          shift_start?: string
+          status?: Database["public"]["Enums"]["crew_status"]
+          utilization_minutes?: number
+        }
+        Update: {
+          created_at?: string
+          depot_id?: string
+          id?: string
+          is_available?: boolean
+          name?: string
+          shift_end?: string
+          shift_start?: string
+          status?: Database["public"]["Enums"]["crew_status"]
+          utilization_minutes?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "crew_depot_id_fkey"
+            columns: ["depot_id"]
+            isOneToOne: false
+            referencedRelation: "depots"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      depots: {
+        Row: {
+          created_at: string
+          id: string
+          lat: number
+          lng: number
+          name: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          lat: number
+          lng: number
+          name: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          lat?: number
+          lng?: number
+          name?: string
+        }
+        Relationships: []
+      }
+      trips: {
+        Row: {
+          code: string
+          created_at: string
+          destination: string
+          end_time: string
+          id: string
+          origin_depot_id: string
+          required_capacity: number
+          start_time: string
+        }
+        Insert: {
+          code: string
+          created_at?: string
+          destination: string
+          end_time: string
+          id?: string
+          origin_depot_id: string
+          required_capacity?: number
+          start_time: string
+        }
+        Update: {
+          code?: string
+          created_at?: string
+          destination?: string
+          end_time?: string
+          id?: string
+          origin_depot_id?: string
+          required_capacity?: number
+          start_time?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "trips_origin_depot_id_fkey"
+            columns: ["origin_depot_id"]
+            isOneToOne: false
+            referencedRelation: "depots"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
@@ -23,7 +221,8 @@ export type Database = {
       [_ in never]: never
     }
     Enums: {
-      [_ in never]: never
+      bus_status: "active" | "maintenance" | "retired" | "inactive"
+      crew_status: "active" | "off_duty" | "inactive"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -150,6 +349,9 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      bus_status: ["active", "maintenance", "retired", "inactive"],
+      crew_status: ["active", "off_duty", "inactive"],
+    },
   },
 } as const
