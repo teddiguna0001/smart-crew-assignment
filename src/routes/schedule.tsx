@@ -160,6 +160,155 @@ function Scheduling() {
       ) : null}
 
       <Panel
+        title="Automatic resource assignment"
+        hint="Deterministic rule-based solver — eligibility, overlap and duty checks run on the server"
+        action={
+          <div className="flex items-center gap-2">
+            <Pill tone={assign.isError ? "destructive" : "primary"}>
+              {assign.isError
+                ? "Solver error"
+                : assign.data?.persisted
+                  ? "Roster published"
+                  : preview
+                    ? "Preview only"
+                    : "Idle"}
+            </Pill>
+            {published.length ? (
+              <span className="num label-xs text-muted-foreground">
+                {published.length} published trips
+              </span>
+            ) : null}
+          </div>
+        }
+      >
+        {assign.isError ? (
+          <p className="text-sm text-destructive">{(assign.error as Error).message}</p>
+        ) : null}
+
+        {metrics ? (
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            <Metric label="Trip coverage" value={metrics.coveragePct} unit="%" tone="primary" />
+            <Metric
+              label="Trips covered"
+              value={`${metrics.coveredTrips}/${metrics.totalTrips}`}
+              tone="secondary"
+              delta={`${metrics.uncoveredTrips} uncovered`}
+            />
+            <Metric
+              label="Resources used"
+              value={`${metrics.busesUsed} · ${metrics.crewUsed}`}
+              tone="accent"
+              delta="Buses · crew committed"
+            />
+            <Metric
+              label="Schedule conflicts"
+              value={metrics.scheduleConflicts}
+              tone={metrics.scheduleConflicts ? "destructive" : "secondary"}
+              delta="Overlaps rejected by the solver"
+            />
+          </div>
+        ) : (
+          <p className="text-sm text-muted-foreground">
+            Run the solver to build a feasible bus and crew plan for the operating day. Retired,
+            inactive and maintenance vehicles, off-duty or unavailable crew, spreadover breaches and
+            overlapping commitments are all excluded before scoring.
+          </p>
+        )}
+
+        {preview?.uncovered.length ? (
+          <div className="mt-6 rounded-md bg-destructive-tint p-5">
+            <p className="label-xs text-destructive">Uncovered trips</p>
+            <ul className="mt-3 grid gap-2 md:grid-cols-2">
+              {preview.uncovered.map((u) => (
+                <li key={u.tripId} className="text-sm">
+                  <span className="num font-semibold">{u.tripCode}</span>{" "}
+                  <span className="text-muted-foreground">
+                    {u.window} · {u.detail}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
+
+        {preview?.assignments.length ? (
+          <div className="mt-6">
+            <DataTable
+              head={
+                <>
+                  <Th>Trip</Th>
+                  <Th>Window</Th>
+                  <Th>Bus</Th>
+                  <Th>Driver</Th>
+                  <Th>Conductor</Th>
+                  <Th>Depot match</Th>
+                </>
+              }
+            >
+              {preview.assignments.map((a) => (
+                <tr key={a.tripId} className="transition-colors duration-200 hover:bg-muted">
+                  <Td>
+                    <p className="num font-semibold">{a.tripCode}</p>
+                    <p className="text-xs text-muted-foreground">Route {a.routeNumber}</p>
+                  </Td>
+                  <Td className="num">{a.window}</Td>
+                  <Td>
+                    <p className="num font-medium">{a.busCode}</p>
+                    <p className="text-xs text-muted-foreground">{a.busNumber}</p>
+                  </Td>
+                  <Td>{a.driverName}</Td>
+                  <Td className="text-muted-foreground">{a.conductorName ?? "—"}</Td>
+                  <Td>
+                    <Pill tone={a.sameDepot ? "secondary" : "accent"}>
+                      {a.sameDepot ? "Same depot" : "Cross depot"}
+                    </Pill>
+                  </Td>
+                </tr>
+              ))}
+            </DataTable>
+          </div>
+        ) : null}
+      </Panel>
+
+      {published.length ? (
+        <Panel title="Published roster" hint="Live assignments stored in the operations database">
+          <DataTable
+            head={
+              <>
+                <Th>Trip</Th>
+                <Th>Window</Th>
+                <Th>Bus</Th>
+                <Th>Crew</Th>
+                <Th>Source</Th>
+              </>
+            }
+          >
+            {published.map((a) => (
+              <tr key={a.id} className="transition-colors duration-200 hover:bg-muted">
+                <Td>
+                  <p className="num font-semibold">{a.trip_code}</p>
+                  <p className="text-xs text-muted-foreground">{a.depot}</p>
+                </Td>
+                <Td className="num">
+                  {minutesToClock(a.start_min)}–{minutesToClock(a.end_min)}
+                </Td>
+                <Td className="num">{a.bus_label ?? "—"}</Td>
+                <Td>
+                  <p>{a.driver_name ?? "—"}</p>
+                  <p className="text-xs text-muted-foreground">{a.conductor_name ?? "No conductor"}</p>
+                </Td>
+                <Td>
+                  <Pill tone={a.source === "AUTO_ASSIGN" ? "primary" : "accent"}>{a.source}</Pill>
+                </Td>
+              </tr>
+            ))}
+          </DataTable>
+        </Panel>
+      ) : null}
+
+
+
+      <Panel
         title="Trip blocks"
         hint={`${trips.length} of ${INITIAL_TRIPS.length} trips shown`}
         action={
