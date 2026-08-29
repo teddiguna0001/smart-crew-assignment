@@ -81,13 +81,30 @@ function Scheduling() {
         title="Scheduling board"
         description="Turnaround blocks generated from GTFS headways, then linked to crew duties inside spreadover and rest-break limits."
         aside={
-          <div className="flex gap-3">
-            <button className="inline-flex h-14 items-center gap-2 rounded-md bg-primary px-6 text-sm font-semibold text-primary-foreground transition-transform duration-200 hover:scale-105">
+          <div className="flex flex-wrap gap-3">
+            <button
+              onClick={() => assign.mutate(false)}
+              disabled={assign.isPending}
+              className="inline-flex h-14 items-center gap-2 rounded-md bg-muted px-6 text-sm font-semibold text-foreground transition-transform duration-200 hover:scale-105 disabled:opacity-60"
+            >
+              <Wand2 className="h-4 w-4" strokeWidth={2.5} />
+              {assign.isPending ? "Solving…" : "Preview auto-assignment"}
+            </button>
+            <button
+              onClick={() => assign.mutate(true)}
+              disabled={assign.isPending}
+              className="inline-flex h-14 items-center gap-2 rounded-md bg-primary px-6 text-sm font-semibold text-primary-foreground transition-transform duration-200 hover:scale-105 disabled:opacity-60"
+            >
+              <Rocket className="h-4 w-4" strokeWidth={2.5} />
+              Publish roster
+            </button>
+            <button className="inline-flex h-14 items-center gap-2 rounded-md bg-ink px-6 text-sm font-semibold text-ink-foreground transition-transform duration-200 hover:scale-105">
               <Repeat className="h-4 w-4" strokeWidth={2.5} />
               Rebuild blocks
             </button>
           </div>
         }
+
       />
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
